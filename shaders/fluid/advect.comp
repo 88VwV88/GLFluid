@@ -1,0 +1,25 @@
+#version 430 core
+layout(local_size_x = 16, local_size_y = 16) in;
+
+// Image bindings: 0 = Read target (Density or Velocity), 1 = Velocity field, 2 = Write destination
+layout(binding = 0) uniform sampler2D uQuantityTex; 
+layout(binding = 1) uniform sampler2D uVelocityTex;
+layout(rgba16f, binding = 2) writeonly uniform image2D outQuantityImg;
+
+uniform float dt;
+uniform vec2 texelSize;
+
+void main() {
+    ivec2 texelCoord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 imgSize = imageSize(outQuantityImg);
+    if (any(greaterThanEqual(texelCoord, imgSize))) return;
+    vec2 uv = (vec2(texelCoord) + 0.5) * texelSize;
+
+    // Read current velocity and trace back in time
+    vec2 vel = texture(uVelocityTex, uv).xy;
+    vec2 backtrackedUV = uv - dt * vel * texelSize;
+
+    // Sample interpolated value from past location and commit changes
+    vec4 transportedValue = texture(uQuantityTex, backtrackedUV);
+    imageStore(outQuantityImg, texelCoord, transportedValue);
+}

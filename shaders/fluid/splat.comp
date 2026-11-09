@@ -1,0 +1,40 @@
+#version 430 core
+layout(local_size_x = 16, local_size_y = 16) in;
+
+// Image bindings (Read/Write images since we are accumulatively adding to them)
+layout(rgba16f, binding = 0) uniform image2D imgDensity;
+layout(rg32f,  binding = 1) uniform image2D imgVelocity;
+
+// Shader Inputs (Uniforms)
+uniform vec2  uMousePos;     // Current mouse position mapped to grid pixels (e.g., 0 to width)
+uniform vec2  uMouseDir;     // Direction vector: (currentMouse - dynamicClickStartMouse) * strength
+uniform float uRadius;       // Influence radius of the splat (in grid pixels)
+uniform vec4  uColor;        // Color of the density fluid being injected
+uniform float uDensityAmt;   // Base multiplier for how much density to inject per frame
+
+void main() {
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 imgSize = imageSize(imgDensity);
+    
+    // Bounds check
+    if (coord.x >= imgSize.x || coord.y >= imgSize.y) return;
+
+    // Calculate distance from current texel to mouse position
+    vec2 diff = vec2(coord) - uMousePos;
+    float distSq = dot(diff, diff);
+
+    // Apply exponential Gaussian falloff based on radius
+    float factor = exp(-distSq / (uRadius * uRadius));
+
+    if (factor > 0.001) {
+        // 1. Accumulate Density (Read current, add new, store back)
+        vec4 baseDensity = imageLoad(imgDensity, coord);
+        vec4 addedDensity = uColor * uDensityAmt * factor;
+        imageStore(imgDensity, coord, baseDensity + addedDensity);
+
+        // 2. Accumulate Velocity (Read current, add direction vector, store back)
+        vec2 baseVelocity = imageLoad(imgVelocity, coord).xy;
+        vec2 addedVelocity = uMouseDir * factor;
+        imageStore(imgVelocity, coord, vec4(baseVelocity + addedVelocity, 0.0, 0.0));
+    }
+}

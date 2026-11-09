@@ -1,0 +1,21 @@
+#version 430 core
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(binding = 0) uniform sampler2D uQuantityTex;
+layout(binding = 1) uniform sampler2D uVelocityTex;
+layout(rg32f, binding = 2) writeonly uniform image2D outQuantityImg;
+
+uniform float dt;
+uniform vec2 texelSize;
+
+void main() {
+    ivec2 texelCoord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 imgSize = imageSize(outQuantityImg);
+    if (any(greaterThanEqual(texelCoord, imgSize))) return;
+    vec2 uv = (vec2(texelCoord) + 0.5) * texelSize;
+
+    vec2 vel = texture(uVelocityTex, uv).xy;
+    vec2 backtrackedUV = uv - dt * vel * texelSize;
+    vec2 transportedValue = texture(uQuantityTex, backtrackedUV).xy;
+    imageStore(outQuantityImg, texelCoord, vec4(transportedValue, 0.0, 0.0));
+}

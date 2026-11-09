@@ -1,0 +1,30 @@
+#version 430 core
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(binding = 0) uniform sampler2D uVelocityTex;
+layout(binding = 1) uniform sampler2D uPressureTex;
+layout(rg32f, binding = 2) writeonly uniform image2D outVelocityImg;
+
+void main() {
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = textureSize(uPressureTex, 0);
+    if (any(greaterThanEqual(coord, size))) return;
+
+    // Sample neighbor pressures
+    float pL = texelFetch(uPressureTex, clamp(coord + ivec2(-1, 0),
+                                               ivec2(0), size - 1), 0).x;
+    float pR = texelFetch(uPressureTex, clamp(coord + ivec2(1, 0),
+                                               ivec2(0), size - 1), 0).x;
+    float pB = texelFetch(uPressureTex, clamp(coord + ivec2(0, -1),
+                                               ivec2(0), size - 1), 0).x;
+    float pT = texelFetch(uPressureTex, clamp(coord + ivec2(0, 1),
+                                               ivec2(0), size - 1), 0).x;
+
+    // Calculate pressure gradient force
+    vec2 gradient = 0.5 * vec2(pR - pL, pT - pB);
+    vec2 oldVelocity = texelFetch(uVelocityTex, coord, 0).xy;
+
+    // Subtract gradient to achieve mass conservation
+    vec2 newVelocity = oldVelocity - gradient;
+    imageStore(outVelocityImg, coord, vec4(newVelocity, 0.0, 0.0));
+}
